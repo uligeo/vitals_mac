@@ -6,9 +6,19 @@ import { panel, bigValue, keyValue, legend } from '../widgets.js';
 import { topGroups } from '../rows.js';
 import { axisChart, miniTable } from './common.js';
 import { t } from '../i18n.js';
+import type { Screen } from '../term.js';
+import type { Color, Ctx, Rect } from '../types.js';
+
+interface Layout {
+  main: Rect;
+  side: Rect;
+  left: Rect;
+  right: Rect;
+  bottom: Rect;
+}
 
 /** Divide el área en una franja superior (gráficas) y una inferior (detalles). */
-function layout(rect, topRatio = 0.55, minTop = 10) {
+function layout(rect: Rect, topRatio = 0.55, minTop = 10): Layout {
   const topH = clamp(Math.round(rect.h * topRatio), minTop, rect.h - 6);
   const cols = split(rect.x, rect.w, 2, 1);
   const wide = Math.round(rect.w * 0.64);
@@ -21,13 +31,13 @@ function layout(rect, topRatio = 0.55, minTop = 10) {
   };
 }
 
-function labeledGauge(scr, x, y, w, label, pct, color, value) {
+function labeledGauge(scr: Screen, x: number, y: number, w: number, label: string, pct: number, color: Color, value?: string): void {
   scr.text(x, y, label, { fg: T.muted });
   scr.textRight(x + w, y, value ?? fmtPct(pct), { fg: typeof color === 'function' ? color(pct) : color, bold: true });
   gauge(scr, x, y + 1, w, pct, color);
 }
 
-export function cpuView(ctx, rect) {
+export function cpuView(ctx: Ctx, rect: Rect): void {
   const { scr, data } = ctx;
   const { cpu, info, history } = data;
   const l = layout(rect);
@@ -72,7 +82,7 @@ export function cpuView(ctx, rect) {
   miniTable(ctx, list, topGroups(data, 'cpu'));
 }
 
-export function memoryView(ctx, rect) {
+export function memoryView(ctx: Ctx, rect: Rect): void {
   const { scr, data } = ctx;
   const { mem, pressure, history } = data;
   if (!mem) return;
@@ -110,7 +120,7 @@ export function memoryView(ctx, rect) {
   }
 }
 
-export function gpuView(ctx, rect) {
+export function gpuView(ctx: Ctx, rect: Rect): void {
   const { scr, data } = ctx;
   const { gpu, info, history } = data;
   const l = layout(rect, 0.6);
@@ -130,11 +140,12 @@ export function gpuView(ctx, rect) {
   scr.text(m.x, m.y + 3, t('Apple Silicon comparte la memoria entre CPU y GPU.'), { fg: T.dim }, m.w);
 
   const a = panel(scr, l.right, t('Actividad reciente'), T.gpu);
-  const stats = (seconds) => {
+  const stats = (seconds: number): { avg: number; max: number } => {
     const window = history.gpu.slice(-seconds);
     return { avg: window.reduce((acc, v) => acc + v, 0) / Math.max(1, window.length), max: Math.max(0, ...window) };
   };
-  [['último minuto', 60], ['últimos 5 min', 300], ['últimos 10 min', 600]].forEach(([label, seconds], i) => {
+  const windows: [string, number][] = [['último minuto', 60], ['últimos 5 min', 300], ['últimos 10 min', 600]];
+  windows.forEach(([label, seconds], i) => {
     if (i * 2 + 1 >= a.h) return;
     const { avg, max } = stats(seconds);
     keyValue(scr, a.x, a.y + i * 2, a.w, t('Promedio {label}', { label: t(label) }), fmtPct(avg, 1), T.gpu);

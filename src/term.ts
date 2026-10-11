@@ -1,17 +1,19 @@
-const TRUECOLOR = /truecolor|24bit/i.test(process.env.COLORTERM || '')
-  || ['iTerm.app', 'vscode', 'WezTerm', 'ghostty'].includes(process.env.TERM_PROGRAM);
+import type { Mouse, Region, Style } from './types.js';
 
-const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const cube = (v) => (v < 48 ? 0 : v < 115 ? 1 : Math.floor((v - 35) / 40));
-const colorCode = (hex, base) => {
-  const [r, g, b] = rgb(hex);
+const TRUECOLOR = /truecolor|24bit/i.test(process.env.COLORTERM || '')
+  || ['iTerm.app', 'vscode', 'WezTerm', 'ghostty'].includes(process.env.TERM_PROGRAM || '');
+
+const rgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const cube = (v: number): number => (v < 48 ? 0 : v < 115 ? 1 : Math.floor((v - 35) / 40));
+const colorCode = (hex: string, base: number): string => {
+  const [r = 0, g = 0, b = 0] = rgb(hex);
   return TRUECOLOR ? `${base};2;${r};${g};${b}` : `${base};5;${16 + 36 * cube(r) + 6 * cube(g) + cube(b)}`;
 };
 
 /** Paleta interna: cada color hex se guarda una vez y las celdas usan su índice (0 = por defecto). */
-const palette = [null];
-const paletteIndex = new Map();
-const intern = (hex) => {
+const palette: string[] = [''];
+const paletteIndex = new Map<string, number>();
+const intern = (hex: string | null | undefined): number => {
   if (!hex) return 0;
   let index = paletteIndex.get(hex);
   if (index === undefined) {
@@ -21,8 +23,8 @@ const intern = (hex) => {
   return index;
 };
 
-const sgrCache = new Map();
-function sgr(fg, bg, bold) {
+const sgrCache = new Map<number, string>();
+function sgr(fg: number, bg: number, bold: number): string {
   const key = (fg * 65536 + bg) * 2 + bold;
   let code = sgrCache.get(key);
   if (!code) {
@@ -42,15 +44,18 @@ function sgr(fg, bg, bold) {
  * serializa a ANSI fila por fila.
  */
 export class Screen {
-  constructor(mouse) {
-    this.mouse = mouse;
-    this.width = 0;
-    this.height = 0;
-    this.regions = [];
-  }
+  width = 0;
+  height = 0;
+  regions: Region[] = [];
+  private ch = new Uint32Array(0);
+  private fg = new Uint16Array(0);
+  private bg = new Uint16Array(0);
+  private bold = new Uint8Array(0);
+
+  constructor(public mouse: Mouse) {}
 
   /** Limpia el búfer para un nuevo render; solo reasigna memoria si cambia el tamaño. */
-  reset(width, height) {
+  reset(width: number, height: number): void {
     if (width !== this.width || height !== this.height) {
       const size = width * height;
       this.width = width;
@@ -67,17 +72,17 @@ export class Screen {
     this.regions = [];
   }
 
-  put(x, y, ch, style = {}) {
+  put(x: number, y: number, ch: string, style: Style = {}): void {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
     const i = y * this.width + x;
-    this.ch[i] = ch.codePointAt(0);
+    this.ch[i] = ch.codePointAt(0) ?? 32;
     if (style.fg !== undefined) this.fg[i] = intern(style.fg);
     if (style.bg !== undefined) this.bg[i] = intern(style.bg);
     this.bold[i] = style.bold ? 1 : 0;
   }
 
   /** Escribe texto truncándolo con elipsis a `max` columnas; devuelve la x final. */
-  text(x, y, value, style = {}, max = Infinity) {
+  text(x: number, y: number, value: string | number, style: Style = {}, max = Infinity): number {
     const chars = [...String(value)];
     const limit = Math.max(0, Math.min(max, this.width - x));
     if (chars.length > limit) {
@@ -89,18 +94,18 @@ export class Screen {
   }
 
   /** Texto alineado a la derecha terminando en la columna `right` (exclusiva). */
-  textRight(right, y, value, style = {}) {
+  textRight(right: number, y: number, value: string | number, style: Style = {}): number {
     const len = [...String(value)].length;
     return this.text(right - len, y, value, style);
   }
 
-  fill(x, y, w, h, style = {}, ch = ' ') {
+  fill(x: number, y: number, w: number, h: number, style: Style = {}, ch = ' '): void {
     for (let row = y; row < y + h; row++) {
       for (let col = x; col < x + w; col++) this.put(col, row, ch, style);
     }
   }
 
-  box(x, y, w, h, { color, title, titleColor, bg } = {}) {
+  box(x: number, y: number, w: number, h: number, { color, title, titleColor, bg }: { color?: string; title?: string; titleColor?: string; bg?: string } = {}): void {
     if (w < 2 || h < 2) return;
     const style = { fg: color, bg };
     if (bg) this.fill(x, y, w, h, { bg });
@@ -120,7 +125,7 @@ export class Screen {
   }
 
   /** Atenúa todo lo dibujado hasta ahora (fondo de los modales). */
-  dim(fg, bg) {
+  dim(fg: string, bg: string): void {
     const [dimFg, dimBg] = [intern(fg), intern(bg)];
     this.fg.fill(dimFg);
     this.bold.fill(0);
@@ -128,11 +133,11 @@ export class Screen {
   }
 
   /** Registra una zona interactiva: { onClick, onWheel }. Las últimas tienen prioridad. */
-  region(x, y, w, h, handlers) {
+  region(x: number, y: number, w: number, h: number, handlers: Pick<Region, 'onClick' | 'onWheel'>): void {
     this.regions.push({ x, y, w, h, ...handlers });
   }
 
-  hit(x, y, kind) {
+  hit(x: number, y: number, kind: 'onClick' | 'onWheel'): Region | null {
     for (let i = this.regions.length - 1; i >= 0; i--) {
       const r = this.regions[i];
       if (r[kind] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r;
@@ -140,13 +145,13 @@ export class Screen {
     return null;
   }
 
-  hover(x, y, w, h) {
+  hover(x: number, y: number, w: number, h: number): boolean {
     const { x: mx, y: my } = this.mouse;
     return mx >= x && mx < x + w && my >= y && my < y + h;
   }
 
-  rows() {
-    const out = [];
+  rows(): string[] {
+    const out: string[] = [];
     for (let y = 0; y < this.height; y++) {
       let line = '';
       let last = '';
@@ -162,11 +167,11 @@ export class Screen {
 }
 
 /** Divide un ancho en `n` columnas con separación `gap`; reparte el sobrante. */
-export function split(x, width, n, gap = 1) {
+export function split(x: number, width: number, n: number, gap = 1): { x: number; w: number }[] {
   const usable = width - gap * (n - 1);
   const base = Math.floor(usable / n);
   let extra = usable - base * n;
-  const out = [];
+  const out: { x: number; w: number }[] = [];
   let cursor = x;
   for (let i = 0; i < n; i++) {
     const w = base + (extra-- > 0 ? 1 : 0);

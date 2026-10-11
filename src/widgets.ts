@@ -2,11 +2,38 @@ import { T, GR, heat } from './theme.js';
 import { gauge, sparkline } from './charts.js';
 import { clamp, fmtBytes } from './format.js';
 import { t } from './i18n.js';
+import type { Screen } from './term.js';
+import type { Rect, Row, Sort, SortKey } from './types.js';
 
-const trendColor = (_, fraction) => GR.cpu(fraction);
+export interface Cell {
+  text?: string;
+  fg?: string;
+  gauge?: number;
+  spark?: number[];
+}
+
+export interface Column<R> {
+  title: string;
+  width: number | 'flex';
+  align?: 'right';
+  sortKey?: SortKey;
+  render: (item: R) => Cell;
+}
+
+interface TableOptions<R> {
+  columns: Column<R>[];
+  selected: number;
+  scroll: number;
+  sort?: Sort;
+  onSort?: ((key: SortKey) => void) | null;
+  onRow?: (index: number, item: R) => void;
+  onWheel?: (delta: number) => void;
+}
+
+const trendColor = (_: number, fraction = 0): string => GR.cpu(fraction);
 
 /** Panel con borde redondeado; se resalta al pasar el ratón si es clicable. */
-export function panel(scr, { x, y, w, h }, title, color, { onClick, right } = {}) {
+export function panel(scr: Screen, { x, y, w, h }: Rect, title: string, color: string, { onClick, right }: { onClick?: () => void; right?: string } = {}): Rect {
   const hovered = onClick && scr.hover(x, y, w, h);
   scr.box(x, y, w, h, { color: hovered ? color : T.border, title, titleColor: color });
   if (right) scr.textRight(x + w - 2, y, ` ${right} `, { fg: T.muted });
@@ -15,7 +42,7 @@ export function panel(scr, { x, y, w, h }, title, color, { onClick, right } = {}
 }
 
 /** Botón tipo píldora. Devuelve la x siguiente. */
-export function button(scr, x, y, label, onClick, { tone = T.accent, active = false } = {}) {
+export function button(scr: Screen, x: number, y: number, label: string, onClick: (() => void) | null, { tone = T.accent, active = false } = {}): number {
   const text = ` ${label} `;
   const w = [...text].length;
   const hovered = scr.hover(x, y, w, 1);
@@ -27,44 +54,42 @@ export function button(scr, x, y, label, onClick, { tone = T.accent, active = fa
   return x + w + 1;
 }
 
-export function keyValue(scr, x, y, w, label, value, tone = T.text) {
+export function keyValue(scr: Screen, x: number, y: number, w: number, label: string, value: string, tone = T.text): void {
   scr.text(x, y, label, { fg: T.muted }, w);
   scr.textRight(x + w, y, value, { fg: tone, bold: true });
 }
 
-export function legend(scr, x, y, color, label, value) {
+export function legend(scr: Screen, x: number, y: number, color: string, label: string, value?: string): number {
   scr.put(x, y, '■', { fg: color });
   const end = scr.text(x + 2, y, label, { fg: T.muted });
   return value ? scr.text(end + 1, y, value, { fg: T.text, bold: true }) : end;
 }
 
 /** Valor grande con etiqueta, para las tarjetas. */
-export function bigValue(scr, x, y, value, unit, color) {
+export function bigValue(scr: Screen, x: number, y: number, value: string, unit: string | undefined, color: string): number {
   const end = scr.text(x, y, value, { fg: color, bold: true });
   return unit ? scr.text(end + 1, y, unit, { fg: T.muted }) : end;
 }
 
-/**
- * Tabla de procesos con columnas configurables, selección, hover y scroll.
- * columns: [{ title, width, align, sortKey, render(item) -> { text, fg } | gauge }]
- */
-export function table(scr, rect, rows, { columns, selected, scroll, sort, onSort, onRow, onWheel }) {
+/** Tabla con columnas configurables, selección, hover, orden por clic y scroll. */
+export function table<R>(scr: Screen, rect: Rect, rows: R[], { columns, selected, scroll, sort, onSort, onRow, onWheel }: TableOptions<R>): void {
   const { x, y, w, h } = rect;
-  const flexible = columns.find((c) => c.width === 'flex');
   const fixed = columns.reduce((acc, c) => acc + (c.width === 'flex' ? 0 : c.width + 1), 0);
-  if (flexible) flexible.actual = Math.max(8, w - fixed - 1);
+  const flexWidth = Math.max(8, w - fixed - 1);
+  const layout: { x: number; w: number }[] = [];
   let cx = x;
   columns.forEach((col) => {
-    const cw = col.width === 'flex' ? col.actual : col.width;
-    const active = sort && col.sortKey === sort.key;
+    const cw = col.width === 'flex' ? flexWidth : col.width;
+    const active = sort !== undefined && col.sortKey === sort.key;
     const arrow = active ? (sort.desc ? ' ▼' : ' ▲') : '';
     const label = `${col.title}${arrow}`;
-    const hovered = col.sortKey && onSort && scr.hover(cx, y, cw, 1);
+    const sortKey = col.sortKey;
+    const hovered = Boolean(sortKey && onSort && scr.hover(cx, y, cw, 1));
     const style = { fg: active ? T.accent : hovered ? T.text : T.muted, bold: active };
     if (col.align === 'right') scr.textRight(cx + cw, y, label, style);
     else scr.text(cx, y, label, style, cw);
-    if (col.sortKey && onSort) scr.region(cx, y, cw, 1, { onClick: () => onSort(col.sortKey) });
-    col.x = cx; col.w = cw;
+    if (sortKey && onSort) scr.region(cx, y, cw, 1, { onClick: () => onSort(sortKey) });
+    layout.push({ x: cx, w: cw });
     cx += cw + 1;
   });
   const bodyH = h - 1;
@@ -77,18 +102,20 @@ export function table(scr, rect, rows, { columns, selected, scroll, sort, onSort
     const bg = isSel ? T.select : hovered ? T.hover : undefined;
     if (bg) scr.fill(x - 1, ry, w + 2, 1, { bg });
     if (isSel) scr.put(x - 1, ry, '▌', { fg: T.accent, bg });
-    columns.forEach((col) => {
+    columns.forEach((col, c) => {
+      const { x: colX, w: colW } = layout[c];
       const cell = col.render(item);
+      const text = cell.text ?? '';
       if (cell.spark) {
-        sparkline(scr, col.x, ry, col.w, cell.spark, trendColor, Math.max(5, ...cell.spark));
+        sparkline(scr, colX, ry, colW, cell.spark, trendColor, Math.max(5, ...cell.spark));
       } else if (cell.gauge !== undefined) {
-        const gw = Math.max(0, col.w - 7);
-        if (gw >= 3) gauge(scr, col.x, ry, gw, cell.gauge, heat(cell.gauge));
-        scr.textRight(col.x + col.w, ry, cell.text, { fg: cell.fg || T.text, bold: isSel });
+        const gw = Math.max(0, colW - 7);
+        if (gw >= 3) gauge(scr, colX, ry, gw, cell.gauge, heat(cell.gauge));
+        scr.textRight(colX + colW, ry, text, { fg: cell.fg || T.text, bold: isSel });
       } else if (col.align === 'right') {
-        scr.textRight(col.x + col.w, ry, cell.text, { fg: cell.fg || T.text, bold: isSel });
+        scr.textRight(colX + colW, ry, text, { fg: cell.fg || T.text, bold: isSel });
       } else {
-        scr.text(col.x, ry, cell.text, { fg: cell.fg || T.text, bold: isSel && col === columns[0] }, col.w);
+        scr.text(colX, ry, text, { fg: cell.fg || T.text, bold: isSel && c === 0 }, colW);
       }
     });
     if (onRow) scr.region(x, ry, w, 1, { onClick: () => onRow(index, item) });
@@ -105,10 +132,10 @@ export function table(scr, rect, rows, { columns, selected, scroll, sort, onSort
 }
 
 /** Columnas estándar para listas de aplicaciones/procesos. */
-export function processColumns({ grouped, compact = false, history }) {
-  const columns = [
+export function processColumns({ grouped, compact = false, history }: { grouped: boolean; compact?: boolean; history?: Map<string, number[]> }): Column<Row>[] {
+  const columns: Column<Row>[] = [
     { title: t(grouped ? 'Aplicación' : 'Proceso'), width: 'flex', sortKey: 'name', render: (i) => ({ text: i.name }) },
-    { title: t('Tendencia'), width: compact ? 10 : 12, render: (i) => ({ spark: history?.get(i.grouped ? i.key : i.app) || [] }) },
+    { title: t('Tendencia'), width: compact ? 10 : 12, render: (i) => ({ spark: history?.get(i.grouped ? i.key : i.app ?? i.key) || [] }) },
     { title: 'CPU', width: 16, align: 'right', sortKey: 'cpu', render: (i) => ({ text: `${i.cpu.toFixed(1)}%`, gauge: clamp(i.cpu, 0, 100), fg: heat(i.cpu) }) },
     { title: t('Memoria'), width: 10, align: 'right', sortKey: 'rss', render: (i) => ({ text: fmtBytes(i.rss), fg: T.mem }) },
     grouped
@@ -126,7 +153,7 @@ export function processColumns({ grouped, compact = false, history }) {
 }
 
 /** Fondo para modales: atenúa visualmente y cierra al hacer clic fuera. */
-export function modalFrame(scr, w, h, title, color, onClose) {
+export function modalFrame(scr: Screen, w: number, h: number, title: string, color: string, onClose: () => void): Rect {
   scr.dim(T.border, T.ink);
   scr.region(0, 0, scr.width, scr.height, { onClick: onClose, onWheel: () => {} });
   const mw = Math.min(w, scr.width - 4);

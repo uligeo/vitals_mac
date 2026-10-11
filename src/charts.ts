@@ -1,5 +1,7 @@
 import { clamp } from './format.js';
 import { T } from './theme.js';
+import type { Screen } from './term.js';
+import type { Color } from './types.js';
 
 const DOTS = [[0x01, 0x08], [0x02, 0x10], [0x04, 0x20], [0x40, 0x80]];
 const PARTIAL_H = ' ▏▎▍▌▋▊▉█';
@@ -11,13 +13,20 @@ const SPARK = '▁▂▃▄▅▆▇█';
  * altura relativa de la fila (0 abajo, 1 arriba) para pintar degradados.
  * Con `invert` crece hacia abajo, útil para gráficas espejo.
  */
-export function areaChart(scr, x, y, w, h, values, { max = 100, color, invert = false, grid = true } = {}) {
+interface AreaOptions {
+  max?: number;
+  color: (fraction: number) => string;
+  invert?: boolean;
+  grid?: boolean;
+}
+
+export function areaChart(scr: Screen, x: number, y: number, w: number, h: number, values: number[], { max = 100, color, invert = false, grid = true }: AreaOptions): void {
   if (w <= 0 || h <= 0) return;
   const cols = w * 2;
   const rows = h * 4;
   const data = values.slice(-cols);
   const offset = cols - data.length;
-  const mask = new Array(w * h).fill(0);
+  const mask = new Uint8Array(w * h);
   const top = Math.max(max, Number.EPSILON);
   data.forEach((value, i) => {
     let level = Math.round(clamp(value / top, 0, 1) * rows);
@@ -40,7 +49,7 @@ export function areaChart(scr, x, y, w, h, values, { max = 100, color, invert = 
 }
 
 /** Barra horizontal con resolución de 1/8 de celda sobre un riel de fondo. */
-export function gauge(scr, x, y, w, pct, color, { track = T.track } = {}) {
+export function gauge(scr: Screen, x: number, y: number, w: number, pct: number, color: Color, { track = T.track } = {}): void {
   const units = (clamp(pct, 0, 100) / 100) * w;
   const full = Math.floor(units);
   const rem = Math.round((units - full) * 8);
@@ -53,7 +62,7 @@ export function gauge(scr, x, y, w, pct, color, { track = T.track } = {}) {
 }
 
 /** Barras verticales (una por valor) con resolución de 1/8 de celda. */
-export function vbars(scr, x, y, h, values, colorOf, { barWidth = 1, gap = 1 } = {}) {
+export function vbars(scr: Screen, x: number, y: number, h: number, values: number[], colorOf: (value: number, fraction: number) => string, { barWidth = 1, gap = 1 } = {}): void {
   values.forEach((value, i) => {
     const units = (clamp(value, 0, 100) / 100) * h * 8;
     const bx = x + i * (barWidth + gap);
@@ -67,7 +76,7 @@ export function vbars(scr, x, y, h, values, colorOf, { barWidth = 1, gap = 1 } =
   });
 }
 
-export function sparkline(scr, x, y, w, values, color, max) {
+export function sparkline(scr: Screen, x: number, y: number, w: number, values: number[], color: Color, max?: number): void {
   const data = values.slice(-w);
   const top = Math.max(max ?? Math.max(...data, 1), Number.EPSILON);
   data.forEach((value, i) => {
@@ -78,7 +87,7 @@ export function sparkline(scr, x, y, w, values, color, max) {
 }
 
 /** Barra apilada: segmentos [{ value, color }] proporcionales a `total`. */
-export function stackedBar(scr, x, y, w, h, segments, total) {
+export function stackedBar(scr: Screen, x: number, y: number, w: number, h: number, segments: { value: number; color: string }[], total: number): void {
   let acc = 0;
   let prevEnd = 0;
   segments.forEach(({ value, color }) => {

@@ -12,9 +12,10 @@ import { cpuView, memoryView, gpuView } from './views/resources.js';
 import { networkView, diskView } from './views/io.js';
 import { powerView } from './views/power.js';
 import { processesView } from './views/processes.js';
+import type { Actions, Row, SortKey, State, View } from './types.js';
 
-const VIEWS = { overview, cpu: cpuView, memory: memoryView, gpu: gpuView, network: networkView, disk: diskView, power: powerView, processes: processesView };
-const SORT_CYCLE = ['cpu', 'rss', 'name', 'count'];
+const VIEWS: Record<string, View> = { overview, cpu: cpuView, memory: memoryView, gpu: gpuView, network: networkView, disk: diskView, power: powerView, processes: processesView };
+const SORT_CYCLE: SortKey[] = ['cpu', 'rss', 'name', 'count'];
 const out = process.stdout;
 
 const config = loadConfig();
@@ -26,7 +27,7 @@ if (!process.stdin.isTTY || !out.isTTY) {
   process.exit(1);
 }
 
-const state = {
+const state: State = {
   tab: 0, selected: 0, scroll: 0, listHeight: 10,
   sort: { key: 'cpu', desc: true }, grouped: true, query: '', searching: false,
   detail: null, confirm: null, help: false, notice: '', paused: false,
@@ -38,25 +39,25 @@ const state = {
 const sampler = createSampler(() => scheduleRender());
 const { data } = sampler;
 
-function currentRows() {
+function currentRows(): Row[] | null {
   const id = TABS[state.tab].id;
   if (id === 'overview') return topGroups(data, 'cpu');
   if (id === 'processes') return processRows(data, state);
   return null;
 }
 
-let noticeTimer = null;
-function notify(message) {
+let noticeTimer: NodeJS.Timeout | undefined;
+function notify(message: string): void {
   state.notice = message;
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { state.notice = ''; scheduleRender(); }, 3000);
 }
 
-function quit() {
+function quit(): never {
   process.exit(0);
 }
 
-const actions = {
+const actions: Actions = {
   quit,
   chooseLanguage(code) {
     setLanguage(code);
@@ -105,7 +106,7 @@ const actions = {
       state.detail = null;
       setTimeout(() => sampler.sample(true), 600);
     } catch (error) {
-      notify(t(error.code === 'EPERM' ? 'Sin permiso para terminar {name}' : 'No se pudo terminar {name}', { name: item.name }));
+      notify(t((error as NodeJS.ErrnoException).code === 'EPERM' ? 'Sin permiso para terminar {name}' : 'No se pudo terminar {name}', { name: item.name }));
     }
   },
   setSort(key) {
@@ -144,11 +145,11 @@ const actions = {
 /* ---------- Render ---------- */
 
 const screen = new Screen(state.mouse);
-let lastScreen = null;
-let prevRows = [];
+let lastScreen: Screen | null = null;
+let prevRows: string[] = [];
 let pending = false;
 
-function flush(scr) {
+function flush(scr: Screen): void {
   const rows = scr.rows();
   let output = '\x1b[?2026h';
   rows.forEach((row, i) => { if (row !== prevRows[i]) output += `\x1b[${i + 1};1H${row}`; });
@@ -157,7 +158,7 @@ function flush(scr) {
   out.write(output);
 }
 
-function render() {
+function render(): void {
   const width = out.columns || 100;
   const height = out.rows || 30;
   const scr = screen;
@@ -188,7 +189,7 @@ function render() {
   flush(scr);
 }
 
-function scheduleRender() {
+function scheduleRender(): void {
   if (pending) return;
   pending = true;
   setImmediate(() => { pending = false; render(); });
@@ -196,11 +197,24 @@ function scheduleRender() {
 
 /* ---------- Entrada ---------- */
 
-const CSI = { A: 'up', B: 'down', C: 'right', D: 'left', H: 'home', F: 'end', Z: 'backtab' };
-const TILDE = { 1: 'home', 3: 'delete', 4: 'end', 5: 'pageup', 6: 'pagedown', 7: 'home', 8: 'end' };
-const SIMPLE = { '\r': 'return', '\n': 'return', '\t': 'tab', '\x7f': 'backspace', '\b': 'backspace', '\x03': 'ctrl-c', ' ': 'space' };
+const CSI: Record<string, string> = { A: 'up', B: 'down', C: 'right', D: 'left', H: 'home', F: 'end', Z: 'backtab' };
+const TILDE: Record<string, string> = { 1: 'home', 3: 'delete', 4: 'end', 5: 'pageup', 6: 'pagedown', 7: 'home', 8: 'end' };
+const SIMPLE: Record<string, string> = { '\r': 'return', '\n': 'return', '\t': 'tab', '\x7f': 'backspace', '\b': 'backspace', '\x03': 'ctrl-c', ' ': 'space' };
 
-function* tokenize(input) {
+interface Key {
+  name: string;
+  ch?: string;
+}
+
+interface MouseEvent {
+  mouse: true;
+  button: number;
+  x: number;
+  y: number;
+  release: boolean;
+}
+
+function* tokenize(input: string): Generator<Key | MouseEvent> {
   let i = 0;
   while (i < input.length) {
     const rest = input.slice(i);
@@ -212,20 +226,21 @@ function* tokenize(input) {
     }
     m = rest.match(/^\x1b(?:\[(\d*)(?:;\d+)?([A-DHFZ~])|O([A-DHF]))/);
     if (m) {
-      yield { name: m[2] === '~' ? TILDE[m[1]] : CSI[m[2] || m[3]] };
+      yield { name: (m[2] === '~' ? TILDE[m[1] ?? ''] : CSI[m[2] || m[3] || '']) || 'unknown' };
       i += m[0].length;
       continue;
     }
     if (rest[0] === '\x1b') { yield { name: 'escape' }; i++; continue; }
-    const ch = String.fromCodePoint(rest.codePointAt(0));
+    const ch = String.fromCodePoint(rest.codePointAt(0) ?? 0);
     i += ch.length;
-    yield SIMPLE[ch] ? { name: SIMPLE[ch] } : { name: ch, ch };
+    const named = SIMPLE[ch];
+    yield named ? { name: named } : { name: ch, ch };
   }
 }
 
-let hovered = null;
+let hovered: string | null = null;
 
-function handleMouse({ button, x, y, release }) {
+function handleMouse({ button, x, y, release }: MouseEvent): void {
   const motion = button & 32;
   state.mouse.x = x;
   state.mouse.y = y;
@@ -241,15 +256,15 @@ function handleMouse({ button, x, y, release }) {
   if (button & 64) {
     const delta = button & 1 ? 3 : -3;
     const target = lastScreen.hit(x, y, 'onWheel');
-    if (target) target.onWheel(delta);
+    if (target?.onWheel) target.onWheel(delta);
     else if (!state.detail && !state.help && !state.confirm) actions.move(delta);
   } else if ((button & 3) === 0) {
-    lastScreen.hit(x, y, 'onClick')?.onClick();
+    lastScreen.hit(x, y, 'onClick')?.onClick?.();
   }
   scheduleRender();
 }
 
-function handleSearchKey(key) {
+function handleSearchKey(key: Key): void {
   if (key.name === 'return') state.searching = false;
   else if (key.name === 'escape') { state.searching = false; actions.clearQuery(); }
   else if (key.name === 'backspace') state.query = state.query.slice(0, -1);
@@ -258,15 +273,15 @@ function handleSearchKey(key) {
   state.scroll = 0;
 }
 
-function handlePickerKey(name) {
+function handlePickerKey(name: string, picker: { index: number }): void {
   const count = LANGUAGES.length;
-  if (name === 'up' || name === 'left' || name === 'backtab') state.picker.index = (state.picker.index - 1 + count) % count;
-  else if (name === 'down' || name === 'right' || name === 'tab') state.picker.index = (state.picker.index + 1) % count;
-  else if (name === 'return') actions.chooseLanguage(LANGUAGES[state.picker.index].code);
+  if (name === 'up' || name === 'left' || name === 'backtab') picker.index = (picker.index - 1 + count) % count;
+  else if (name === 'down' || name === 'right' || name === 'tab') picker.index = (picker.index + 1) % count;
+  else if (name === 'return') actions.chooseLanguage(LANGUAGES[picker.index].code);
   else if (/^[1-9]$/.test(name) && Number(name) <= count) actions.chooseLanguage(LANGUAGES[Number(name) - 1].code);
 }
 
-function handleKey(key) {
+function handleKey(key: Key): void {
   const { name } = key;
   if (name === 'ctrl-c') quit();
   if (state.searching) return handleSearchKey(key);
@@ -276,7 +291,7 @@ function handleKey(key) {
     return;
   }
   if (name === 'q') quit();
-  if (state.picker) return handlePickerKey(name);
+  if (state.picker) return handlePickerKey(name, state.picker);
   if (name === 'L') return actions.cycleLanguage();
   if (state.help) { state.help = false; return; }
   if (state.detail) {
@@ -325,7 +340,7 @@ process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   for (const token of tokenize(chunk.toString('utf8'))) {
-    if (token.mouse) handleMouse(token);
+    if ('mouse' in token) handleMouse(token);
     else { handleKey(token); scheduleRender(); }
   }
 });

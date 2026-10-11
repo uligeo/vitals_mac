@@ -1,20 +1,24 @@
 import os from 'node:os';
 import * as probe from './probes.js';
+import type { CpuUsage, Data, PortEntry, Process, Row, Series } from './types.js';
 
 const HISTORY = 600;
 const APP_HISTORY = 60;
-const SERIES = ['cpu', 'user', 'sys', 'mem', 'gpu', 'rx', 'tx', 'read', 'write', 'battery', 'watts'];
+const SERIES: Series[] = ['cpu', 'user', 'sys', 'mem', 'gpu', 'rx', 'tx', 'read', 'write', 'battery', 'watts'];
 
 /** Cada cuántos ticks (1 s) se ejecuta cada sonda; las costosas van más espaciadas. */
 const EVERY = { processes: 2, pressure: 2, battery: 10, ports: 15, volumes: 30, iface: 30 };
 
-function cpuUsage(prev, now) {
+type Probe = keyof typeof EVERY;
+type CpuTimes = os.CpuInfo['times'];
+
+function cpuUsage(prev: os.CpuInfo[], now: os.CpuInfo[]): CpuUsage {
   let user = 0;
   let sys = 0;
   let all = 0;
   const cores = now.map((core, i) => {
     const before = prev[i]?.times || core.times;
-    const d = (key) => core.times[key] - before[key];
+    const d = (key: keyof CpuTimes): number => core.times[key] - before[key];
     const u = d('user') + d('nice');
     const s = d('sys') + d('irq');
     const total = u + s + d('idle') || 1;
@@ -24,11 +28,11 @@ function cpuUsage(prev, now) {
   return { cores, user: (user / all) * 100, sys: (sys / all) * 100, total: ((user + sys) / all) * 100 };
 }
 
-function groupProcesses(list, ports) {
-  const groups = new Map();
+function groupProcesses(list: Process[], ports: Map<number, PortEntry>): Row[] {
+  const groups = new Map<string, Row>();
   for (const item of list) {
-    const group = groups.get(item.app) || {
-      key: item.app, name: item.app, cpu: 0, mem: 0, rss: 0, count: 0, pids: [], members: [],
+    const group: Row = groups.get(item.app) || {
+      key: item.app, name: item.app, cpu: 0, mem: 0, rss: 0, count: 0, pid: item.pid, pids: [], members: [],
       user: item.user, elapsed: item.elapsed, command: item.command, ports: new Set(), grouped: true,
     };
     group.cpu += item.cpu; group.mem += item.mem; group.rss += item.rss; group.count++;
@@ -44,27 +48,32 @@ function groupProcesses(list, ports) {
   return [...groups.values()];
 }
 
-export function createSampler(onUpdate) {
-  const data = {
+export interface Sampler {
+  data: Data;
+  sample: (force?: boolean) => Promise<void>;
+}
+
+export function createSampler(onUpdate: () => void): Sampler {
+  const data: Data = {
     info: null, cpu: { cores: [], user: 0, sys: 0, total: 0 }, load: os.loadavg(),
     mem: null, pressure: { swapTotal: 0, swapUsed: 0, pressure: NaN }, gpu: {},
     iface: 'en0', net: { rx: 0, tx: 0, rxTotal: 0, txTotal: 0, rxSession: 0, txSession: 0 },
     disk: { read: 0, write: 0, readSession: 0, writeSession: 0 }, volumes: [],
-    battery: { present: false }, processes: [], groups: [], ports: new Map(),
-    history: Object.fromEntries(SERIES.map((key) => [key, []])), appHistory: new Map(),
+    battery: { present: false, source: '' }, processes: [], groups: [], ports: new Map(),
+    history: Object.fromEntries(SERIES.map((key) => [key, [] as number[]])) as Record<Series, number[]>, appHistory: new Map(),
     capturedAt: new Date(), uptime: os.uptime(),
   };
   let tick = 0;
   let prevCpu = os.cpus();
-  let prevNet = null;
-  let prevDisk = null;
+  let prevNet: { rx: number; tx: number } | null = null;
+  let prevDisk: { read: number; write: number } | null = null;
   let prevAt = Date.now();
   let busy = false;
 
-  const due = (name, force) => force || tick % EVERY[name] === 0;
-  const push = (key, value) => {
+  const due = (name: Probe, force: boolean): boolean => force || tick % EVERY[name] === 0;
+  const push = (key: Series, value: number | undefined): void => {
     const series = data.history[key];
-    series.push(Number.isFinite(value) ? value : 0);
+    series.push(value !== undefined && Number.isFinite(value) ? value : 0);
     if (series.length > HISTORY) series.shift();
   };
 
@@ -134,7 +143,9 @@ export function createSampler(onUpdate) {
       push('mem', mem.percent); push('gpu', gpu.device);
       push('rx', data.net.rx); push('tx', data.net.tx);
       push('read', data.disk.read); push('write', data.disk.write);
-      push('battery', data.battery.percent); push('watts', Math.abs(data.battery.watts || 0));
+      const power = data.battery;
+      push('battery', power.present ? power.percent : 0);
+      push('watts', power.present ? Math.abs(power.watts) : 0);
       data.capturedAt = new Date();
       tick++;
     } finally {

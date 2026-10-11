@@ -3,10 +3,11 @@ import { panel, button } from '../widgets.js';
 import { processRows } from '../rows.js';
 import { selectableTable } from './common.js';
 import { t } from '../i18n.js';
+import type { Ctx, Rect, SortKey } from '../types.js';
 
-const SORTS = [['cpu', 'CPU'], ['rss', 'Memoria'], ['name', 'Nombre'], ['count', 'Procesos']];
+const SORTS: [SortKey, string][] = [['cpu', 'CPU'], ['rss', 'Memoria'], ['name', 'Nombre'], ['count', 'Procesos']];
 
-export function processesView(ctx, rect) {
+export function processesView(ctx: Ctx, rect: Rect): void {
   const { scr, data, state, actions } = ctx;
   const rows = processRows(data, state);
 

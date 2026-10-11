@@ -4,8 +4,10 @@ import { fmtPct } from '../format.js';
 import { panel, keyValue, bigValue } from '../widgets.js';
 import { axisChart } from './common.js';
 import { t } from '../i18n.js';
+import type { Screen } from '../term.js';
+import type { Ctx, Rect } from '../types.js';
 
-const STATES = {
+const STATES: Record<string, string> = {
   charging: 'Cargando',
   discharging: 'Descargando',
   charged: 'Carga completa',
@@ -13,12 +15,12 @@ const STATES = {
   'AC attached': 'Conectada, sin cargar',
 };
 
-const SOURCES = { 'AC Power': 'Corriente alterna', 'Battery Power': 'Batería', 'UPS Power': 'UPS' };
+const SOURCES: Record<string, string> = { 'AC Power': 'Corriente alterna', 'Battery Power': 'Batería', 'UPS Power': 'UPS' };
 
-export const batteryStateLabel = (state) => t(STATES[state] || state);
+export const batteryStateLabel = (state: string): string => t(STATES[state] || state);
 
 /** Dibuja una batería con relleno proporcional y el porcentaje centrado. */
-function batteryIcon(scr, x, y, w, h, pct, tone) {
+function batteryIcon(scr: Screen, x: number, y: number, w: number, h: number, pct: number, tone: string): void {
   scr.box(x, y, w - 1, h, { color: T.muted });
   const nubY = y + Math.floor(h / 2) - (h > 4 ? 1 : 0);
   for (let row = nubY; row < nubY + (h > 4 ? 2 : 1); row++) scr.put(x + w - 1, row, '▐', { fg: T.muted });
@@ -38,7 +40,7 @@ function batteryIcon(scr, x, y, w, h, pct, tone) {
   });
 }
 
-export function powerView(ctx, rect) {
+export function powerView(ctx: Ctx, rect: Rect): void {
   const { scr, data } = ctx;
   const b = data.battery;
   const topH = Math.min(12, Math.max(9, Math.round(rect.h * 0.45)));

@@ -7,8 +7,22 @@ import { topGroups } from '../rows.js';
 import { selectableTable } from './common.js';
 import { batteryStateLabel } from './power.js';
 import { t } from '../i18n.js';
+import type { Ctx, Rect } from '../types.js';
 
-function card(ctx, rect, spec) {
+interface CardSpec {
+  tab: number;
+  title: string;
+  color: string;
+  value: string;
+  unit?: string;
+  sub: string;
+  right?: string;
+  series: number[];
+  chartColor?: (fraction: number) => string;
+  mirror?: number[];
+}
+
+function card(ctx: Ctx, rect: Rect, spec: CardSpec): void {
   const { scr, actions } = ctx;
   const inner = panel(scr, rect, spec.title, spec.color, { onClick: () => actions.setTab(spec.tab), right: spec.right });
   bigValue(scr, inner.x, inner.y, spec.value, spec.unit, spec.color);
@@ -21,14 +35,15 @@ function card(ctx, rect, spec) {
     areaChart(scr, inner.x, inner.y + 1, inner.w, half, spec.series, { max, color: GR.down, grid: false });
     areaChart(scr, inner.x, inner.y + 1 + half, inner.w, chartH - half, spec.mirror, { max, color: GR.up, invert: true, grid: false });
   } else {
-    areaChart(scr, inner.x, inner.y + 1, inner.w, chartH, spec.series, { max: 100, color: spec.chartColor, grid: false });
+    areaChart(scr, inner.x, inner.y + 1, inner.w, chartH, spec.series, { max: 100, color: spec.chartColor ?? GR.cpu, grid: false });
   }
 }
 
-function cards(ctx, { x, y, w }) {
+function cards(ctx: Ctx, { x, y, w }: Pick<Rect, 'x' | 'y' | 'w'>): number {
   const { data } = ctx;
   const { cpu, mem, gpu, net, history } = data;
-  const specs = [
+  if (!mem) return 0;
+  const specs: CardSpec[] = [
     { tab: 1, title: 'CPU', color: T.cpu, value: fmtPct(cpu.total), sub: `usr ${fmtPct(cpu.user)} · sys ${fmtPct(cpu.sys)}`, series: history.cpu, chartColor: GR.cpu },
     { tab: 2, title: t('Memoria'), color: T.mem, value: fmtBytes(mem.used), unit: `/ ${fmtBytes(mem.total)}`, sub: fmtPct(mem.percent), series: history.mem, chartColor: GR.mem },
     { tab: 3, title: 'GPU', color: T.gpu, value: fmtPct(gpu.device), sub: t('{v} en uso', { v: fmtBytes(gpu.memory) }), series: history.gpu, chartColor: GR.gpu },
@@ -43,7 +58,7 @@ function cards(ctx, { x, y, w }) {
   return Math.ceil(specs.length / perRow) * cardH;
 }
 
-function vitals(ctx, { x, y, w, h }) {
+function vitals(ctx: Ctx, { x, y, w, h }: Rect): void {
   const { scr, data, actions } = ctx;
   const [diskCol, powerCol, sysCol] = split(x, w, 3, 1);
   const root = data.volumes.find((v) => v.mount === '/');
@@ -76,7 +91,7 @@ function vitals(ctx, { x, y, w, h }) {
   if (s.h > 3) keyValue(scr, s.x, s.y + 3, s.w, t('Encendido'), fmtDuration(data.uptime), T.text);
 }
 
-export function overview(ctx, rect) {
+export function overview(ctx: Ctx, rect: Rect): void {
   const { scr } = ctx;
   if (!ctx.data.mem) return;
   let y = rect.y;

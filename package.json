@@ -10,12 +10,18 @@
     "url": "git+https://github.com/uligeo/vitals_mac.git"
   },
   "bin": {
-    "vitals": "src/index.js"
+    "vitals": "dist/index.js"
   },
   "packageManager": "pnpm@10.4.1",
   "scripts": {
-    "start": "node --max-semi-space-size=1 --max-old-space-size=64 src/index.js",
-    "dev": "node --watch src/index.js",
-    "check": "for f in src/*.js src/views/*.js; do node --check $f || exit 1; done"
+    "build": "tsc -p . && chmod +x dist/index.js",
+    "prepare": "pnpm build",
+    "start": "node --max-semi-space-size=1 --max-old-space-size=64 dist/index.js",
+    "dev": "tsc -p . --watch --preserveWatchOutput",
+    "check": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
   }
 }

@@ -2,7 +2,7 @@
 
 [Español](README.md) · **English**
 
-An interactive terminal dashboard that shows what your Mac is doing in real time: live charts for CPU, memory, GPU, network, disk and power, plus a process table you can drive with the keyboard and mouse. No dependencies, small footprint.
+An interactive terminal dashboard that shows what your Mac is doing in real time: live charts for CPU, memory, GPU, network, disk and power, plus a process table you can drive with the keyboard and mouse. Written in TypeScript, no runtime dependencies, small footprint.
 
 ![Overview](docs/screenshots/overview-en.png)
 
@@ -18,7 +18,7 @@ An interactive terminal dashboard that shows what your Mac is doing in real time
 ```bash
 git clone https://github.com/uligeo/vitals_mac.git
 cd vitals_mac
-pnpm install
+pnpm install   # installs and compiles to dist/
 pnpm start
 ```
 
@@ -40,7 +40,7 @@ On first launch you pick a language (Spanish or English), with your system langu
 - Press `L` inside the app to switch language; the change is saved.
 - `vitals --lang en` or `vitals --lang es` forces a language for that session only.
 
-To add a language, add its dictionary to `src/i18n.js`.
+To add a language, add its dictionary to `src/i18n.ts`.
 
 ## Views
 
@@ -99,10 +99,14 @@ Everything comes from standard macOS tools, without elevated permissions: `ps`, 
 
 Terminating an app sends `SIGTERM` to the group's root process, only after confirmation.
 
-## Checks
+## Development
+
+Sources live in `src/` (TypeScript, `strict` mode) and compile to `dist/` with `tsc`. The compiled JavaScript is what runs, so TypeScript adds no runtime cost.
 
 ```bash
-pnpm check
+pnpm build   # compile to dist/
+pnpm dev     # recompile on save; run pnpm start in another terminal
+pnpm check   # type check
 ```
 
 ## License

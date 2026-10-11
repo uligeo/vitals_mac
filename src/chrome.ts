@@ -3,6 +3,7 @@ import { areaChart } from './charts.js';
 import { fmtBytes, fmtDuration, etimeToSeconds } from './format.js';
 import { button, keyValue, modalFrame } from './widgets.js';
 import { t, getLanguage, LANGUAGES } from './i18n.js';
+import type { ConfirmItem, Ctx, Row } from './types.js';
 
 export const TABS = [
   { id: 'overview', label: 'Resumen', color: T.accent },
@@ -15,7 +16,7 @@ export const TABS = [
   { id: 'processes', label: 'Procesos', color: T.accent },
 ];
 
-export function header({ scr, data, state, actions }) {
+export function header({ scr, data, state, actions }: Ctx): void {
   scr.fill(0, 0, scr.width, 1, { bg: T.surface });
   let x = scr.text(0, 0, ' ◆ MAC VITALS ', { fg: T.ink, bg: T.accent, bold: true });
   const info = data.info;
@@ -29,7 +30,7 @@ export function header({ scr, data, state, actions }) {
   button(scr, scr.width - clock.length - label.length - 4, 0, label, actions.togglePause, { tone: state.paused ? T.warn : T.ok });
 }
 
-export function tabBar({ scr, state, actions }) {
+export function tabBar({ scr, state, actions }: Ctx): void {
   const gap = scr.width >= 90 ? 1 : 0;
   let x = 1;
   TABS.forEach((tab, i) => {
@@ -46,7 +47,7 @@ export function tabBar({ scr, state, actions }) {
   });
 }
 
-export function footer({ scr, state, actions }) {
+export function footer({ scr, state, actions }: Ctx): void {
   const y = scr.height - 1;
   scr.fill(0, y, scr.width, 1, { bg: T.surface });
   if (state.searching) {
@@ -69,13 +70,19 @@ export function footer({ scr, state, actions }) {
   if (state.query) x = button(scr, x, y, t('filtro: {q} ✕', { q: state.query }), actions.clearQuery, { tone: T.warn });
   let right = scr.width - 1;
   const lang = `L ${getLanguage().code.toUpperCase()}`;
-  for (const [label, fn, tone] of [[t('q salir'), actions.quit, T.danger], [t('? ayuda'), actions.toggleHelp, T.accent], [t('r actualizar'), actions.refresh, T.ok], [lang, actions.cycleLanguage, T.gpu]]) {
+  const controls: [string, () => void, string][] = [
+    [t('q salir'), actions.quit, T.danger],
+    [t('? ayuda'), actions.toggleHelp, T.accent],
+    [t('r actualizar'), actions.refresh, T.ok],
+    [lang, actions.cycleLanguage, T.gpu],
+  ];
+  for (const [label, fn, tone] of controls) {
     right -= [...label].length + 3;
     if (right > x) button(scr, right, y, label, fn, { tone });
   }
 }
 
-export function helpModal({ scr, actions }) {
+export function helpModal({ scr, actions }: Ctx): void {
   const r = modalFrame(scr, 64, 23, t('Atajos'), T.accent, actions.toggleHelp);
   const rows = [
     ['← → · Tab · 1-8', 'cambiar de vista'],
@@ -100,7 +107,7 @@ export function helpModal({ scr, actions }) {
   scr.text(r.x + 1, r.y + r.h - 2, t('Las tarjetas y paneles con borde resaltado también son clicables.'), { fg: T.muted }, r.w - 2);
 }
 
-export function detailModal({ scr, data, actions }, item) {
+export function detailModal({ scr, data, actions }: Ctx, item: Row | null): void {
   const r = modalFrame(scr, 92, 26, item ? item.name : t('Proceso finalizado'), T.accent, actions.closeDetail);
   if (!item) {
     scr.text(r.x + 1, r.y + 1, t('El proceso ya no está en ejecución.'), { fg: T.muted });
@@ -138,7 +145,7 @@ export function detailModal({ scr, data, actions }, item) {
   button(scr, bx, by, t('Esc Cerrar'), actions.closeDetail, { tone: T.muted });
 }
 
-export function confirmModal({ scr, actions }, item) {
+export function confirmModal({ scr, actions }: Ctx, item: ConfirmItem): void {
   const r = modalFrame(scr, 56, 8, t('Confirmar'), T.danger, () => actions.confirm(false));
   scr.text(r.x + 1, r.y + 1, t('¿Enviar SIGTERM a {name}?', { name: item.name }), { fg: T.text, bold: true }, r.w - 2);
   scr.text(r.x + 1, r.y + 2, `PID ${item.pid}${item.grouped && item.count > 1 ? t(' (proceso raíz de {n})', { n: item.count }) : ''}`, { fg: T.muted }, r.w - 2);
@@ -147,7 +154,7 @@ export function confirmModal({ scr, actions }, item) {
 }
 
 /** Selector de idioma del primer arranque; los textos van en ambos idiomas a propósito. */
-export function languagePicker({ scr, state, actions }) {
+export function languagePicker({ scr, state, actions }: Ctx): void {
   scr.fill(0, 0, scr.width, scr.height, { bg: T.ink });
   const w = Math.min(54, scr.width - 4);
   const h = 11 + LANGUAGES.length * 2;
@@ -159,7 +166,7 @@ export function languagePicker({ scr, state, actions }) {
   scr.text(x + 3, y + 4, 'Choose your language', { fg: T.muted });
   LANGUAGES.forEach((lang, i) => {
     const ry = y + 6 + i * 2;
-    const selected = state.picker.index === i;
+    const selected = state.picker?.index === i;
     const hovered = scr.hover(x + 3, ry, w - 6, 1);
     const bg = selected ? T.accent : hovered ? T.hover : T.track;
     scr.fill(x + 3, ry, w - 6, 1, { bg });

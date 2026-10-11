@@ -2,7 +2,7 @@
 
 **Español** · [English](README.en.md)
 
-Panel interactivo en la terminal para observar la actividad de tu Mac en tiempo real: gráficas en vivo de CPU, memoria, GPU, red, disco y energía, más una tabla de procesos navegable con teclado y ratón. Sin dependencias y con bajo consumo.
+Panel interactivo en la terminal para observar la actividad de tu Mac en tiempo real: gráficas en vivo de CPU, memoria, GPU, red, disco y energía, más una tabla de procesos navegable con teclado y ratón. Escrito en TypeScript, sin dependencias en tiempo de ejecución y con bajo consumo.
 
 ![Resumen](docs/screenshots/overview-es.png)
 
@@ -18,7 +18,7 @@ Panel interactivo en la terminal para observar la actividad de tu Mac en tiempo 
 ```bash
 git clone https://github.com/uligeo/vitals_mac.git
 cd vitals_mac
-pnpm install
+pnpm install   # instala y compila a dist/
 pnpm start
 ```
 
@@ -40,7 +40,7 @@ La primera vez que abres la app eliges el idioma (español o inglés); la opció
 - `L` dentro de la app cambia de idioma y lo guarda.
 - `vitals --lang en` o `vitals --lang es` fuerza un idioma solo para esa sesión.
 
-Para agregar otro idioma basta con añadir su diccionario en `src/i18n.js`.
+Para agregar otro idioma basta con añadir su diccionario en `src/i18n.ts`.
 
 ## Vistas
 
@@ -101,26 +101,29 @@ Todo se obtiene sin permisos elevados con herramientas estándar de macOS: `ps`,
 
 Terminar una aplicación envía `SIGTERM` al proceso raíz del grupo, solo después de confirmar.
 
-## Estructura
+## Desarrollo
+
+El código fuente está en `src/` (TypeScript en modo `strict`) y se compila a `dist/` con `tsc`. Se ejecuta el JavaScript compilado, así que TypeScript no añade consumo en tiempo de ejecución.
+
+```bash
+pnpm build   # compila a dist/
+pnpm dev     # recompila al guardar; en otra terminal: pnpm start
+pnpm check   # verificación de tipos
+```
 
 ```
 src/
-  index.js      ciclo de vida, entrada de teclado y ratón
-  sampler.js    muestreo periódico, tasas e historial
-  probes.js     comandos de macOS y su análisis
-  term.js       búfer de pantalla, regiones clicables y salida ANSI
-  charts.js     gráficas braille, medidores y barras
-  widgets.js    paneles, botones, tablas y modales
-  chrome.js     encabezado, pestañas, pie, modales y selector de idioma
-  i18n.js       traducciones
-  config.js     preferencias guardadas y argumentos
+  index.ts      ciclo de vida, entrada de teclado y ratón
+  types.ts      tipos compartidos (datos, estado, acciones)
+  sampler.ts    muestreo periódico, tasas e historial
+  probes.ts     comandos de macOS y su análisis
+  term.ts       búfer de pantalla, regiones clicables y salida ANSI
+  charts.ts     gráficas braille, medidores y barras
+  widgets.ts    paneles, botones, tablas y modales
+  chrome.ts     encabezado, pestañas, pie, modales y selector de idioma
+  i18n.ts       traducciones
+  config.ts     preferencias guardadas y argumentos
   views/        una vista por pestaña
-```
-
-## Verificación
-
-```bash
-pnpm check
 ```
 
 ## Licencia

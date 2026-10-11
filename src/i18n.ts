@@ -4,7 +4,7 @@
  * Para agregar un idioma basta con añadir su diccionario a DICTIONARIES.
  */
 
-const EN = {
+const EN: Record<string, string> = {
   // Pestañas y encabezado
   Resumen: 'Overview', Memoria: 'Memory', Red: 'Network', Disco: 'Disk', Energía: 'Power', Procesos: 'Processes',
   '{n} núcleos': '{n} cores', 'activo {t}': 'up {t}', '❚❚ PAUSADO': '❚❚ PAUSED', '● EN VIVO': '● LIVE',
@@ -87,28 +87,34 @@ const EN = {
   'Sin permiso para terminar {name}': 'No permission to terminate {name}', 'No se pudo terminar {name}': 'Could not terminate {name}',
 };
 
-export const LANGUAGES = [
+export interface Language {
+  code: string;
+  name: string;
+  locale: string;
+}
+
+export const LANGUAGES: Language[] = [
   { code: 'es', name: 'Español', locale: 'es-MX' },
   { code: 'en', name: 'English', locale: 'en-US' },
 ];
 
-const DICTIONARIES = { es: {}, en: EN };
-let current = LANGUAGES[0];
+const DICTIONARIES: Record<string, Record<string, string>> = { es: {}, en: EN };
+let current: Language = LANGUAGES[0];
 
-export const isLanguage = (code) => LANGUAGES.some((lang) => lang.code === code);
-export const getLanguage = () => current;
+export const isLanguage = (code: unknown): code is string => LANGUAGES.some((lang) => lang.code === code);
+export const getLanguage = (): Language => current;
 
-export function setLanguage(code) {
+export function setLanguage(code: string): void {
   current = LANGUAGES.find((lang) => lang.code === code) || LANGUAGES[0];
 }
 
 /** Idioma sugerido según la configuración regional del sistema. */
-export function systemLanguage() {
+export function systemLanguage(): string {
   const locale = Intl.DateTimeFormat().resolvedOptions().locale || process.env.LANG || '';
   return LANGUAGES.find((lang) => locale.toLowerCase().startsWith(lang.code))?.code || 'en';
 }
 
-export function t(text, params) {
-  const value = DICTIONARIES[current.code][text] ?? text;
-  return params ? value.replace(/\{(\w+)\}/g, (_, key) => String(params[key])) : value;
+export function t(text: string, params?: Record<string, string | number>): string {
+  const value = DICTIONARIES[current.code]?.[text] ?? text;
+  return params ? value.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key])) : value;
 }

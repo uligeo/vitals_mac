@@ -4,8 +4,32 @@ import { fmtBytes, fmtRate, fmtPct } from '../format.js';
 import { panel, keyValue, legend, table } from '../widgets.js';
 import { mirrorChart } from './common.js';
 import { t } from '../i18n.js';
+import type { Ctx, PortEntry, Process, Rect } from '../types.js';
 
-function frame(rect, topRatio = 0.58) {
+interface Frame {
+  main: Rect;
+  side: Rect;
+  bottom: Rect;
+}
+
+interface RatesSpec {
+  title: string;
+  right?: string;
+  color: string;
+  top: number[];
+  bottom: number[];
+  topColor: string;
+  bottomColor: string;
+  topGradient: (fraction: number) => string;
+  bottomGradient: (fraction: number) => string;
+  topLabel: string;
+  bottomLabel: string;
+  totals: [string, string, string][];
+}
+
+type PortRow = PortEntry & { process?: Process; list: number[] };
+
+function frame(rect: Rect, topRatio = 0.58): Frame {
   const topH = Math.max(10, Math.min(rect.h - 6, Math.round(rect.h * topRatio)));
   const wide = Math.round(rect.w * 0.68);
   return {
@@ -15,10 +39,10 @@ function frame(rect, topRatio = 0.58) {
   };
 }
 
-const peak = (series, seconds) => Math.max(0, ...series.slice(-seconds));
+const peak = (series: number[], seconds: number): number => Math.max(0, ...series.slice(-seconds));
 
 /** Panel de tasas con gráfica espejo y totales laterales. */
-function ratesPanel(ctx, l, spec) {
+function ratesPanel(ctx: Ctx, l: Frame, spec: RatesSpec): void {
   const { scr } = ctx;
   const c = panel(scr, l.main, t(spec.title), spec.color, { right: spec.right });
   let x = legend(scr, c.x, c.y, spec.topColor, t(spec.topLabel), fmtRate(spec.top.at(-1) || 0));
@@ -33,7 +57,7 @@ function ratesPanel(ctx, l, spec) {
   });
 }
 
-export function networkView(ctx, rect) {
+export function networkView(ctx: Ctx, rect: Rect): void {
   const { scr, data, actions } = ctx;
   const { net, history } = data;
   const l = frame(rect);
@@ -56,7 +80,7 @@ export function networkView(ctx, rect) {
   if (l.bottom.h < 4) return;
   const b = panel(scr, l.bottom, t('Puertos TCP en escucha'), T.down, { right: t('clic para detalles') });
   const byPid = new Map(data.processes.map((p) => [p.pid, p]));
-  const rows = [...data.ports.values()]
+  const rows: PortRow[] = [...data.ports.values()]
     .map((entry) => ({ ...entry, process: byPid.get(entry.pid), list: [...entry.ports].sort((a, c) => a - c) }))
     .sort((a, c) => a.list[0] - c.list[0]);
   if (!rows.length) {
@@ -79,7 +103,7 @@ export function networkView(ctx, rect) {
   });
 }
 
-export function diskView(ctx, rect) {
+export function diskView(ctx: Ctx, rect: Rect): void {
   const { scr, data } = ctx;
   const { disk, history } = data;
   const l = frame(rect, 0.6);

@@ -23,14 +23,14 @@ export const T = {
   danger: '#f7768e',
 };
 
-const toRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const toHex = (rgb) => `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+const toRgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const toHex = (rgb: number[]): string => `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 
 /** Pasos de cuantización: limitan la paleta a un conjunto finito y memorizable. */
 const STEPS = 24;
-const mixCache = new Map();
+const mixCache = new Map<string, string>();
 
-export function mix(a, b, t) {
+export function mix(a: string, b: string, t: number): string {
   const step = Math.round(clamp(t, 0, 1) * STEPS);
   const key = `${a}${b}${step}`;
   let color = mixCache.get(key);
@@ -42,10 +42,10 @@ export function mix(a, b, t) {
   return color;
 }
 
-const HEAT = [[0, T.ok], [55, T.warn], [85, T.danger], [100, T.danger]];
+const HEAT: [number, string][] = [[0, T.ok], [55, T.warn], [85, T.danger], [100, T.danger]];
 
 /** Color semáforo para un porcentaje: verde, ámbar, rojo. */
-export function heat(pct) {
+export function heat(pct: number): string {
   const p = clamp(pct, 0, 100);
   for (let i = 1; i < HEAT.length; i++) {
     const [stop, color] = HEAT[i];
@@ -66,10 +66,10 @@ export const G = {
   write: ['#e0af68', '#ff9e64', '#f7768e', '#ff007c'],
   battery: ['#f7768e', '#e0af68', '#9ece6a', '#73daca'],
   power: ['#9ece6a', '#e0af68', '#ff9e64', '#f7768e'],
-};
+} satisfies Record<string, string[]>;
 
 /** Función de color a partir de paradas; recibe una fracción entre 0 y 1. */
-export function gradient(stops) {
+export function gradient(stops: string[]): (fraction: number) => string {
   return (fraction) => {
     const pos = clamp(fraction, 0, 1) * (stops.length - 1);
     const i = Math.min(stops.length - 2, Math.floor(pos));
@@ -78,5 +78,6 @@ export function gradient(stops) {
 }
 
 /** Degradados listos para gráficas (fracción 0-1) y medidores (porcentaje). */
-export const GR = Object.fromEntries(Object.entries(G).map(([key, stops]) => [key, gradient(stops)]));
-export const RAMP = Object.fromEntries(Object.entries(GR).map(([key, fn]) => [key, (pct) => fn(pct / 100)]));
+type Palette = keyof typeof G;
+export const GR = Object.fromEntries(Object.entries(G).map(([key, stops]) => [key, gradient(stops)])) as Record<Palette, (fraction: number) => string>;
+export const RAMP = Object.fromEntries(Object.entries(GR).map(([key, fn]) => [key, (pct: number) => fn(pct / 100)])) as Record<Palette, (pct: number) => string>;

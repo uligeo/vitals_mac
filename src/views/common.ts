@@ -2,11 +2,15 @@ import { T } from '../theme.js';
 import { areaChart } from '../charts.js';
 import { clamp, fmtRate } from '../format.js';
 import { table, processColumns } from '../widgets.js';
+import type { Screen } from '../term.js';
+import type { Ctx, Rect, Row } from '../types.js';
 
-const visibleMax = (series, width) => Math.max(...series.slice(-width * 2), 0);
+type Gradient = (fraction: number) => string;
+
+const visibleMax = (series: number[], width: number): number => Math.max(...series.slice(-width * 2), 0);
 
 /** Gráfica de área con etiquetas del eje Y en un margen izquierdo. */
-export function axisChart(scr, { x, y, w, h }, series, { max = 100, color, label = (v) => `${Math.round(v)}%` }) {
+export function axisChart(scr: Screen, { x, y, w, h }: Rect, series: number[], { max = 100, color, label = (v: number) => `${Math.round(v)}%` }: { max?: number; color: Gradient; label?: (v: number) => string }): void {
   const labels = [label(max), label(max / 2), label(0)];
   const gutter = Math.max(...labels.map((l) => l.length)) + 1;
   scr.text(x, y, labels[0].padStart(gutter - 1), { fg: T.dim });
@@ -19,7 +23,7 @@ export function axisChart(scr, { x, y, w, h }, series, { max = 100, color, label
  * Gráfica espejo para tasas de entrada/salida: la serie superior crece hacia
  * arriba y la inferior hacia abajo, ambas con la misma escala automática.
  */
-export function mirrorChart(scr, { x, y, w, h }, top, bottom, { topColor, bottomColor }) {
+export function mirrorChart(scr: Screen, { x, y, w, h }: Rect, top: number[], bottom: number[], { topColor, bottomColor }: { topColor: Gradient; bottomColor: Gradient }): void {
   const gutter = 11;
   const width = w - gutter;
   const max = Math.max(1024, visibleMax(top, width), visibleMax(bottom, width)) * 1.15;
@@ -32,7 +36,7 @@ export function mirrorChart(scr, { x, y, w, h }, top, bottom, { topColor, bottom
 }
 
 /** Tabla de procesos vinculada a la selección global (teclado, rueda y clic). */
-export function selectableTable(ctx, rect, rows, { grouped = true, compact = false, sortable = false } = {}) {
+export function selectableTable(ctx: Ctx, rect: Rect, rows: Row[], { grouped = true, compact = false, sortable = false } = {}): void {
   const { scr, state, actions } = ctx;
   const bodyH = Math.max(1, rect.h - 1);
   state.listHeight = bodyH;
@@ -52,7 +56,7 @@ export function selectableTable(ctx, rect, rows, { grouped = true, compact = fal
 }
 
 /** Lista compacta de solo lectura (clic abre el detalle). */
-export function miniTable(ctx, rect, rows) {
+export function miniTable(ctx: Ctx, rect: Rect, rows: Row[]): void {
   const { scr, actions } = ctx;
   table(scr, rect, rows.slice(0, Math.max(0, rect.h - 1)), {
     columns: processColumns({ grouped: true, compact: true, history: ctx.data.appHistory }),
