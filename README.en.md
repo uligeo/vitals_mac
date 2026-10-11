@@ -104,3 +104,7 @@ Terminating an app sends `SIGTERM` to the group's root process, only after confi
 ```bash
 pnpm check
 ```
+
+## License
+
+[MIT](LICENSE)

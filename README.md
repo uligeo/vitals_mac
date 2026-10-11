@@ -122,3 +122,7 @@ src/
 ```bash
 pnpm check
 ```
+
+## Licencia
+
+[MIT](LICENSE)

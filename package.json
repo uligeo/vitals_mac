@@ -2,6 +2,7 @@
   "name": "mac-activity-tui",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Interactive terminal dashboard with live charts for macOS activity.",
   "type": "module",
   "repository": {
